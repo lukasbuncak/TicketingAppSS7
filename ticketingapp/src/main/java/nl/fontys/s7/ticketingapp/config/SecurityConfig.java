@@ -1,5 +1,6 @@
 package nl.fontys.s7.ticketingapp.config;
 
+import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -57,11 +58,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(reg -> reg
                         // allow only CORS preflights (OPTIONS) for any path
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Static files (css/js) needed by Swagger UI
+                        .requestMatchers( PathRequest.toStaticResources().atCommonLocations()).permitAll()
                         .requestMatchers(SWAGGER).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         // ONLY login is public
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
-
+                        .requestMatchers("/admin/**").permitAll() //TODO: Temporary, remove later in production
                         // everything else requires a valid Bearer token
                         .anyRequest().authenticated()
                 )

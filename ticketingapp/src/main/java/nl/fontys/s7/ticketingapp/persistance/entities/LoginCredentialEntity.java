@@ -3,10 +3,15 @@ package nl.fontys.s7.ticketingapp.persistance.entities;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.Instant;
 
 @Entity
+@Getter
+@Setter
 @Table(name = "login_credentials", schema = "auth")
 public class LoginCredentialEntity {
     @Id

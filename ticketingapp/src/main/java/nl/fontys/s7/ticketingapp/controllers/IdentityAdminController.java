@@ -4,9 +4,11 @@ import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import nl.fontys.s7.ticketingapp.business.IdentityAdminService;
+import nl.fontys.s7.ticketingapp.domain.dto.AdminUserResponse;
 import nl.fontys.s7.ticketingapp.domain.dto.CreateUserAccountRequest;
 import nl.fontys.s7.ticketingapp.domain.dto.UpdateUserStatusRequest;
 import nl.fontys.s7.ticketingapp.domain.dto.UserResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -19,15 +21,16 @@ import java.net.URI;
 public class IdentityAdminController {
     private final IdentityAdminService identityAdminService;
 
-    @RolesAllowed({"ADMIN"})
+//    @RolesAllowed({"ADMIN"})
     @PostMapping("/create/student_user")
-    public ResponseEntity < UserResponse > createUserAccountAsAdmin( @RequestBody @Valid CreateUserAccountRequest request) {
-        UserResponse created = identityAdminService.createUserAccount(request);
+    @ResponseStatus(HttpStatus.CREATED)
+    public ResponseEntity < AdminUserResponse > createUserAccountAsAdmin( @RequestBody @Valid CreateUserAccountRequest request) {
+        AdminUserResponse created = identityAdminService.createUserAccount(request);
 
         URI location = ServletUriComponentsBuilder
                 .fromCurrentRequest()
                 .path("/{id}")
-                .buildAndExpand(created.id())
+                .buildAndExpand(created.status ())
                 .toUri();
 
         return ResponseEntity.created(location).body(created);
@@ -35,10 +38,10 @@ public class IdentityAdminController {
 
     @RolesAllowed({"ADMIN"})
     @PutMapping("/users/{id}/statusUpdate")
-    public ResponseEntity<UserResponse> setUserStatus(
+    public ResponseEntity< AdminUserResponse > setUserStatus(
             @RequestBody @Valid UpdateUserStatusRequest request, @PathVariable Integer id) {
 
-        UserResponse updated = identityAdminService.setUserStatus(request);
+        AdminUserResponse updated = identityAdminService.setUserStatus(request);
         return ResponseEntity.ok(updated); // 200 OK with updated user
     }
 }

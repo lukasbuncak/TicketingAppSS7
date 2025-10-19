@@ -1,67 +1,73 @@
 package nl.fontys.s7.ticketingapp.persistance.entities;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import nl.fontys.s7.ticketingapp.domain.enumerations.UserStatus;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.Instant;
 
-@Data
+@Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "users", schema = "core")
+@Table(
+        name = "users",
+        schema = "core",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uq_users_personal_email", columnNames = "personal_email"),
+                @UniqueConstraint(name = "uq_users_school_email",   columnNames = "school_email")
+        }
+)
+@ToString(onlyExplicitlyIncluded = true)
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class UserEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(nullable = false, updatable = false)
+    @EqualsAndHashCode.Include
+    @ToString.Include
     private Integer id;
 
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, optional = false,
-            cascade = CascadeType.ALL, orphanRemoval = true) // <-- handy for create/remove
+            cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore                 // prevent recursion in JSON
     private LoginCredentialEntity credentials;
 
     @NotBlank @Email
     @Column(name = "personal_email", nullable = false, updatable = false)
     private String personalEmail;
 
-    @NotBlank
+    // Generated column in DB -> read-only from JPA, no @NotBlank
     @Email
-    @Column(name = "school_email", nullable = false, updatable = false)
+    @Column(name = "school_email", nullable = false, updatable = false, insertable = false)
     private String schoolEmail;
 
     @Column(name = "display_name")
     private String displayName;
 
     @NotNull
-    @Enumerated(EnumType.STRING)               // maps to core.user_status enum values
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private UserStatus status = UserStatus.ACTIVE;
 
     @Column(name = "disabled_at")
     private Instant disabledAt;
 
-    @NotNull
+    // If you don’t want Hibernate annotations, keep your @PrePersist/@PreUpdate instead.
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @NotNull
+    @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @PrePersist
-    void onCreate() {
-        var now = Instant.now();
-        if (createdAt == null) createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    void onUpdate() { updatedAt = Instant.now(); }
 
 }
