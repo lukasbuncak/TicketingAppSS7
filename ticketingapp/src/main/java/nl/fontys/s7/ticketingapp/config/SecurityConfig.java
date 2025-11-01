@@ -30,7 +30,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
         cfg.setAllowedOrigins(List.of(
-                "http://localhost:5173"   // TODO: add your real frontend(s)
+                "http://localhost:5174",
+                "http://localhost:5173"// TODO: add your real frontend(s)
                 // "https://app.example.com"
         ));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE"));

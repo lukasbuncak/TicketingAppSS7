@@ -1,8 +1,11 @@
 package nl.fontys.s7.ticketingapp.domain.dto;
 
+import jakarta.validation.constraints.NotNull;
+
 public record AdminUserResponse(
 
-        String schoolEmail,
-        String displayName,
-        String status
+        @NotNull String schoolEmail,
+        @NotNull String displayName,
+        @NotNull String status,
+        String TempPassword
 ) {}

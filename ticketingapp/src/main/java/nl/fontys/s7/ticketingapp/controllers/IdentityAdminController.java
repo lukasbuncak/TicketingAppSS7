@@ -4,10 +4,7 @@ import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import nl.fontys.s7.ticketingapp.business.IdentityAdminService;
-import nl.fontys.s7.ticketingapp.domain.dto.AdminUserResponse;
-import nl.fontys.s7.ticketingapp.domain.dto.CreateUserAccountRequest;
-import nl.fontys.s7.ticketingapp.domain.dto.UpdateUserStatusRequest;
-import nl.fontys.s7.ticketingapp.domain.dto.UserResponse;
+import nl.fontys.s7.ticketingapp.domain.dto.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -36,12 +33,20 @@ public class IdentityAdminController {
         return ResponseEntity.created(location).body(created);
     }
 
-    @RolesAllowed({"ADMIN"})
-    @PutMapping("/users/{id}/statusUpdate")
-    public ResponseEntity< AdminUserResponse > setUserStatus(
-            @RequestBody @Valid UpdateUserStatusRequest request, @PathVariable Integer id) {
 
-        AdminUserResponse updated = identityAdminService.setUserStatus(request);
-        return ResponseEntity.ok(updated); // 200 OK with updated user
+    @RolesAllowed({"ADMIN"})
+    @GetMapping("/users/{id}")
+    public ResponseEntity< AdminGetUser > getUserById( @PathVariable("id") Integer id) {
+        AdminGetUser resp = identityAdminService.getById(id);
+        return ResponseEntity.ok(resp);
+    }
+
+    @RolesAllowed({"ADMIN"})
+    @PatchMapping("/update/user_status")
+    public ResponseEntity<AdminUserResponse> setStatus(
+            @RequestBody @jakarta.validation.Valid UpdateUserStatusRequest body
+    ) {
+        var resp = identityAdminService.setUserStatus(body);
+        return ResponseEntity.ok(resp);
     }
 }

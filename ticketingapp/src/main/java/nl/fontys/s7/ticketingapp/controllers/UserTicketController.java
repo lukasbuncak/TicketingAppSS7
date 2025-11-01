@@ -9,7 +9,9 @@ import nl.fontys.s7.ticketingapp.domain.dto.CreateTicketRequest;
 import nl.fontys.s7.ticketingapp.domain.objects.TicketObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -24,34 +26,31 @@ public class UserTicketController {
     private final UserTicketService userTicketsService;
 
     // Create ticket — POST /tickets
-    @PostMapping
-    public ResponseEntity < TicketObject > createTicket( @Valid @RequestBody CreateTicketRequest request) {
-        Integer ownerId = SecurityJWTAuthUser.currentUserId(); // from your JWT
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<TicketObject> createTicket(@Valid @RequestBody CreateTicketRequest request) {
+        Integer ownerId = SecurityJWTAuthUser.currentUserId();
         TicketObject created = userTicketsService.createTicket(ownerId, request);
 
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
-                .buildAndExpand(created.getId())
+                .buildAndExpand(created.getId ())
                 .toUri();
 
         return ResponseEntity.created(location).body(created);
     }
 
-    // List my tickets — GET /tickets
     @GetMapping
-    public ResponseEntity< Page <TicketObject> > listMyTickets(
-            @PageableDefault(size = 100) Pageable pageable) {
-
+    public ResponseEntity<Page<TicketObject>> listMyTickets(
+            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
         Integer ownerId = SecurityJWTAuthUser.currentUserId();
-        Page<TicketObject> page = userTicketsService.listTicketsForOwner(ownerId, pageable);
-        return ResponseEntity.ok(page);
+        return ResponseEntity.ok(userTicketsService.listTicketsForOwner(ownerId, pageable));
     }
 
-    // View my ticket — GET /tickets/{id}
     @GetMapping("/{id}")
     public ResponseEntity<TicketObject> getMyTicket(@PathVariable Integer id) {
         Integer ownerId = SecurityJWTAuthUser.currentUserId();
-        TicketObject ticket = userTicketsService.getTicketForOwner(ownerId, id);
-        return ResponseEntity.ok(ticket);
+        return ResponseEntity.ok(userTicketsService.getTicketForOwner(ownerId, id));
     }
 }

@@ -8,6 +8,7 @@ import java.time.Instant;
 
 @Data
 @Builder
+@Getter
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -15,9 +16,11 @@ public class TicketObject {
     private Integer id;
     private String title;
     private String description;
-    private TicketStatus status;
+    private String status;
     private Integer ownerId;
     private Integer assigneeId;   // can be null
     private Instant createdAt;
     private Instant updatedAt;
+
+
 }

@@ -8,9 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 
-public interface TicketRepository extends JpaRepository< TicketEntity, Long> {
-    Page <TicketEntity> findByOwnerId( Integer ownerId, Pageable pageable);
+public interface TicketRepository extends JpaRepository<TicketEntity, Integer> {
+    Page<TicketEntity> findByOwnerId(Integer ownerId, Pageable pageable);
     Page<TicketEntity> findByAssigneeId(Integer assigneeId, Pageable pageable);
-    Page<TicketEntity> findByStatusIn( List <String> status, Pageable pageable);
+    Page<TicketEntity> findByStatusIn(List<String> status, Pageable pageable);
     Page<TicketEntity> findByTitleContainingIgnoreCase(String title, Pageable pageable);
 }

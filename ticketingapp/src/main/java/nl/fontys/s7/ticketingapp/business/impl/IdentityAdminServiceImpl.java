@@ -4,6 +4,7 @@ import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import nl.fontys.s7.ticketingapp.business.IdentityAdminService;
 import nl.fontys.s7.ticketingapp.config.hashing.PasswordUtil;
+import nl.fontys.s7.ticketingapp.domain.dto.AdminGetUser;
 import nl.fontys.s7.ticketingapp.domain.dto.AdminUserResponse;
 import nl.fontys.s7.ticketingapp.domain.dto.CreateUserAccountRequest;
 import nl.fontys.s7.ticketingapp.domain.dto.UpdateUserStatusRequest;
@@ -14,6 +15,8 @@ import nl.fontys.s7.ticketingapp.persistance.repository.LoginCredentialRepositor
 import nl.fontys.s7.ticketingapp.persistance.repository.UserRepository;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.Objects;
 
 @Service
 @AllArgsConstructor
@@ -51,17 +54,65 @@ public class IdentityAdminServiceImpl implements IdentityAdminService {
         return new AdminUserResponse (
                 user.getSchoolEmail(),
                 user.getDisplayName(),
-                user.getStatus().name()
+                user.getStatus().name(),
+                tempPassword
         );
 
-        //password should be hashed and generated via argon2 and not by us
+        //TODO: password should be hashed and sent to us via email so that we can change it
         // later we will send out email to change it together with the base password. (not yet)
 
     }
 
     @Override
     public AdminUserResponse setUserStatus ( UpdateUserStatusRequest UserStatus ) {
-        return null;
+        UserEntity user = users.findById(UserStatus.userId ())
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + UserStatus.userId ()));
+
+        var newStatus = UserStatus.status();
+        if (newStatus == null) {
+            throw new IllegalArgumentException("status is required");
+        }
+
+        // idempotent: if already in desired state, just return
+        if (Objects.equals ( user.getStatus ( ).toString ( ), newStatus )) {
+            return new AdminUserResponse(
+                    user.getSchoolEmail(),
+                    user.getDisplayName(),
+                    user.getStatus().name(),
+                    ""
+            );
+        }
+
+        user.setStatus( nl.fontys.s7.ticketingapp.domain.enumerations.UserStatus.DISABLED);
+        if (newStatus.equals ( "DISABLED" )) {
+            user.setDisabledAt(java.time.Instant.now());
+        } else { // ACTIVE
+            user.setDisabledAt(null);
+        }
+
+        users.save(user);
+
+        return new AdminUserResponse(
+                user.getSchoolEmail(),
+                user.getDisplayName(),
+                user.getStatus().name(),
+                ""
+        );
+    }
+
+    @Override
+    @Transactional
+    public AdminGetUser getById( Integer id) {
+        UserEntity u = users.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+
+
+        return new AdminGetUser(
+                u.getSchoolEmail(),
+                u.getDisplayName(),
+                u.getStatus().name(),
+                u.getPersonalEmail() // temporary mapping for 'PersonalId'
+        );
     }
 
     @Override

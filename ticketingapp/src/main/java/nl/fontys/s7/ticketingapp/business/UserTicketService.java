@@ -6,7 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface UserTicketService {
-    TicketObject createTicket( Integer ownerId, CreateTicketRequest request);
-    Page <TicketObject> listTicketsForOwner( Integer ownerId, Pageable pageable);
+    TicketObject createTicket(Integer ownerId, CreateTicketRequest request);
+    Page<TicketObject> listTicketsForOwner(Integer ownerId, Pageable pageable);
     TicketObject getTicketForOwner(Integer ownerId, Integer ticketId);
 }
