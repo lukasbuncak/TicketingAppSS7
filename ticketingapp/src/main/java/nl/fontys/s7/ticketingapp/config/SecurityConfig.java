@@ -1,5 +1,6 @@
 package nl.fontys.s7.ticketingapp.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +21,8 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+    @Value("${app.cors.allowed-origins:*}")
+    private List<String> allowedOrigins;
     private static final String[] SWAGGER = {
             "/v3/api-docs/**",
             "/swagger-resources/**",
@@ -29,11 +32,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of(
-                "http://localhost:5174",
-                "http://localhost:5173"// TODO: add your real frontend(s)
-                // "https://app.example.com"
-        ));
+        cfg.setAllowedOriginPatterns(allowedOrigins);
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE"));
         cfg.setAllowedHeaders(List.of("Authorization","Content-Type"));
         cfg.setAllowCredentials(false);           // JWT in header, no cookies
