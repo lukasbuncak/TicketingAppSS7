@@ -1,4 +1,4 @@
-name: Build & deploy backend to Azure Container Apps (via ACR)
+name: Build & deploy backend to ACA via ACR
 
 on:
   push:
@@ -8,8 +8,7 @@ on:
 env:
   AZ_ACR_NAME: ${{ secrets.AZ_ACR_NAME }}                  # e.g. ticketappacr
   AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}      # e.g. App
-  AZ_CONTAINERAPP_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}# e.g. backend-ticket-vnet
-
+  AZ_CONTAINERAPP_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}# e.g. backend-ticketapp
   ACR_LOGIN_SERVER: ${{ secrets.AZ_ACR_NAME }}.azurecr.io
   IMAGE_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}
 
@@ -31,30 +30,28 @@ jobs:
           tenant-id: ${{ secrets.BACKENDTICKETAPP_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.BACKENDTICKETAPP_AZURE_SUBSCRIPTION_ID }}
 
-      - name: "ACR docker login"
-        id: acrlogin
+      - name: ACR docker login
         run: |
           TOKEN=$(az acr login -n "$AZ_ACR_NAME" --expose-token --query accessToken -o tsv)
           echo "$TOKEN" | docker login "$ACR_LOGIN_SERVER" \
             --username 00000000-0000-0000-0000-000000000000 \
             --password-stdin
 
-      - name: Build and push image
+      - name: Build & push image
         run: |
-          APP_DIR=./                                  # change if your backend is in a subfolder
-          DOCKERFILE=./Dockerfile                     # change if the Dockerfile path differs
+          APP_DIR=./                # change if backend is in a subfolder
+          DOCKERFILE=./Dockerfile   # change if path differs
 
-          IMAGE_SHA_TAG="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
-          IMAGE_LATEST_TAG="$ACR_LOGIN_SERVER/$IMAGE_NAME:latest"
+          IMAGE_SHA="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
+          IMAGE_LATEST="$ACR_LOGIN_SERVER/$IMAGE_NAME:latest"
 
-          docker build -f "$DOCKERFILE" "$APP_DIR" -t "$IMAGE_SHA_TAG" -t "$IMAGE_LATEST_TAG"
-          docker push "$IMAGE_SHA_TAG"
-          docker push "$IMAGE_LATEST_TAG"
+          docker build -f "$DOCKERFILE" "$APP_DIR" -t "$IMAGE_SHA" -t "$IMAGE_LATEST"
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
 
-          echo "IMAGE_SHA_TAG=$IMAGE_SHA_TAG" >> $GITHUB_ENV
-          echo "IMAGE_LATEST_TAG=$IMAGE_LATEST_TAG" >> $GITHUB_ENV
+          echo "IMAGE_SHA=$IMAGE_SHA" >> $GITHUB_ENV
 
-      - name: Ensure registry on Container App
+      - name: Link ACR to Container App (system identity)
         run: |
           az containerapp registry set \
             --name "$AZ_CONTAINERAPP_NAME" \
@@ -62,9 +59,9 @@ jobs:
             --server "$ACR_LOGIN_SERVER" \
             --identity system
 
-      - name: Update Container App image
+      - name: Update Container App to new image
         run: |
           az containerapp update \
             --name "$AZ_CONTAINERAPP_NAME" \
             --resource-group "$AZ_RESOURCE_GROUP" \
-            --image "$IMAGE_SHA_TAG"
+            --image "$IMAGE_SHA"
