@@ -1,26 +1,27 @@
-name: build-and-deploy
+name: build-and-deploy-backend-ticketapp
 
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
 
-# Required for OIDC (azure/login@v2)
+# Needed for Azure OIDC login
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  build-and-deploy:
+  build_push_deploy:
     runs-on: ubuntu-latest
 
-    # Put env here so secrets resolve cleanly
     env:
-      # ----- names of your Azure resources -----
+      # Resource names come from your repo secrets (see screenshot)
       AZURE_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
       CONTAINER_APP_NAME:   ${{ secrets.AZ_CONTAINERAPP_NAME }}
-      ACR_NAME:             ${{ secrets.AZ_ACR_NAME }}          # e.g. myacr123 (NO .azurecr.io)
-      IMAGE_REPO:           backend-ticketapp                   # repo name inside ACR
+      ACR_NAME:             ${{ secrets.AZ_ACR_NAME }}     # just the ACR resource name (no .azurecr.io)
+      ACR_REPO:             backend-ticketapp              # repo inside ACR
+      APP_PATH:             ticketingapp                   # folder that has Dockerfile
+      DOCKERFILE:           ticketingapp/Dockerfile
 
     steps:
       - name: Checkout
@@ -38,40 +39,42 @@ jobs:
           set -e
           az extension add --name containerapp --upgrade
           az provider register --namespace Microsoft.App --wait
+          az provider register --namespace Microsoft.ContainerRegistry --wait
 
-      - name: Resolve ACR login server + login to ACR
+      - name: Get ACR login server & login Docker to ACR
         id: acr
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "${ACR_NAME}" ]]; then
-            echo "ACR_NAME is empty. Set secret AZ_ACR_NAME to your ACR resource name." >&2
+            echo "Secret AZ_ACR_NAME is empty." >&2
             exit 1
           fi
-          ACR_LOGIN_SERVER=$(az acr show -n "$ACR_NAME" --query loginServer -o tsv)
-          echo "login_server=$ACR_LOGIN_SERVER" >> "$GITHUB_OUTPUT"
+          LOGIN_SERVER=$(az acr show -n "${ACR_NAME}" --query loginServer -o tsv)
+          echo "login_server=$LOGIN_SERVER" >> "$GITHUB_OUTPUT"
+          # Authenticate Docker to ACR using the Azure CLI session (no passwords)
+          az acr login -n "${ACR_NAME}"
 
-          # Authenticate Docker to ACR using the azure/login OIDC session
-          az acr login -n "$ACR_NAME"
-
-      - name: Build & push image (Dockerfile in ticketingapp/)
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: ticketingapp
-          file: ticketingapp/Dockerfile
-          push: true
-          tags: ${{ steps.acr.outputs.login_server }}/${{ env.IMAGE_REPO }}:${{ github.sha }}
-          cache-from: type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.IMAGE_REPO }}:buildcache
-          cache-to:   type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.IMAGE_REPO }}:buildcache,mode=max
-
-      - name: Compute image name
+      - name: Compute image tag
         id: img
         shell: bash
         run: |
-          echo "name=${{ steps.acr.outputs.login_server }}/${{ env.IMAGE_REPO }}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "name=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
-      # Give the Container App permission to pull from ACR via its managed identity (idempotent)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push image (Dockerfile in ticketingapp/)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.APP_PATH }}
+          file: ${{ env.DOCKERFILE }}
+          push: true
+          tags: ${{ steps.img.outputs.name }}
+          cache-from: type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:buildcache
+          cache-to:   type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:buildcache,mode=max
+
+      # ---- ACR <-> ACA permissions via Managed Identity (idempotent) ----
       - name: Allow Container App to pull from ACR (managed identity)
         shell: bash
         run: |
@@ -80,33 +83,31 @@ jobs:
           APP="${CONTAINER_APP_NAME}"
           ACR="${ACR_NAME}"
 
-          if [[ -z "$RG" || -z "$APP" || -z "$ACR" ]]; then
-            echo "One of AZ_RESOURCE_GROUP / AZ_CONTAINERAPP_NAME / AZ_ACR_NAME secrets is missing." >&2
-            exit 1
-          fi
-
           ACR_LOGIN_SERVER=$(az acr show -n "$ACR" --query loginServer -o tsv)
           ACR_ID=$(az acr show -n "$ACR" --query id -o tsv)
 
-          # Ensure the Container App has a system-assigned managed identity
+          # Ensure system-assigned identity on the Container App
           az containerapp identity assign -g "$RG" -n "$APP" --system >/dev/null
 
-          # Look up that identity's principalId
+          # Principal ID of that identity
           PRINCIPAL_ID=$(az containerapp show -g "$RG" -n "$APP" --query identity.principalId -o tsv)
 
-          # Grant AcrPull to that principal on the ACR (safe to re-run)
+          # Grant AcrPull on ACR to that principal (safe to re-run)
           az role assignment create \
             --assignee "$PRINCIPAL_ID" \
             --role "AcrPull" \
             --scope "$ACR_ID" \
-            >/dev/null || echo "Role assignment may already exist."
+            >/dev/null || echo "AcrPull role assignment already exists."
 
-          # Attach the registry so the app uses its MI to pull images
+          # Attach the registry using the system identity (prevents ACR credential prompts)
           az containerapp registry set \
             -g "$RG" \
             -n "$APP" \
             --server "$ACR_LOGIN_SERVER" \
             --identity system
+
+          # Optional: brief pause to let RBAC propagate
+          sleep 15
 
       - name: Deploy new image to Azure Container Apps
         shell: bash
