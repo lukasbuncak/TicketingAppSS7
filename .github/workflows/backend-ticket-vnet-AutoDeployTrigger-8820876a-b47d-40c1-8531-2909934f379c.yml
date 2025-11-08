@@ -1,67 +1,68 @@
-name: Build & deploy backend to ACA via ACR
+name: Build & Deploy (backend-ticketapp)
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'ticketingapp/**'
+      - '.github/workflows/build-and-deploy.yml'
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
-  AZ_ACR_NAME: ${{ secrets.AZ_ACR_NAME }}                  # e.g. ticketappacr
-  AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}      # e.g. App
-  AZ_CONTAINERAPP_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}# e.g. backend-ticketapp
-  ACR_LOGIN_SERVER: ${{ secrets.AZ_ACR_NAME }}.azurecr.io
-  IMAGE_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}
+  RG: ${{ secrets.AZ_RESOURCE_GROUP }}            # e.g. App
+  APP: ${{ secrets.AZ_CONTAINERAPP_NAME }}        # e.g. backend-ticketapp
+  ACR: ${{ secrets.AZ_ACR_NAME }}                 # e.g. ticketappacr
+  IMAGE_NAME: backend-ticketapp                   # repo name inside ACR
+  DOCKER_BUILDKIT: 1
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure Login (OIDC)
+      - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.BACKENDTICKETAPP_AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.BACKENDTICKETAPP_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.BACKENDTICKETAPP_AZURE_SUBSCRIPTION_ID }}
 
-      - name: ACR docker login
+      - name: Get ACR login server
+        id: acr
         run: |
-          TOKEN=$(az acr login -n "$AZ_ACR_NAME" --expose-token --query accessToken -o tsv)
-          echo "$TOKEN" | docker login "$ACR_LOGIN_SERVER" \
-            --username 00000000-0000-0000-0000-000000000000 \
-            --password-stdin
+          echo "SERVER=$(az acr show -n "$ACR" --query loginServer -o tsv)" >> $GITHUB_OUTPUT
 
-      - name: Build & push image
+      - name: Docker login to ACR (token, no admin user needed)
         run: |
-          APP_DIR=./                # change if backend is in a subfolder
-          DOCKERFILE=./Dockerfile   # change if path differs
+          TOKEN=$(az acr login -n "$ACR" --expose-token --output tsv --query accessToken)
+          echo "$TOKEN" | docker login https://${{ steps.acr.outputs.SERVER }} \
+            --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
-          IMAGE_SHA="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
-          IMAGE_LATEST="$ACR_LOGIN_SERVER/$IMAGE_NAME:latest"
-
-          docker build -f "$DOCKERFILE" "$APP_DIR" -t "$IMAGE_SHA" -t "$IMAGE_LATEST"
-          docker push "$IMAGE_SHA"
-          docker push "$IMAGE_LATEST"
-
-          echo "IMAGE_SHA=$IMAGE_SHA" >> $GITHUB_ENV
-
-      - name: Link ACR to Container App (system identity)
+      - name: Build image (uses ticketingapp/Dockerfile and context)
         run: |
-          az containerapp registry set \
-            --name "$AZ_CONTAINERAPP_NAME" \
-            --resource-group "$AZ_RESOURCE_GROUP" \
-            --server "$ACR_LOGIN_SERVER" \
-            --identity system
+          REG="${{ steps.acr.outputs.SERVER }}"
+          TAG="${GITHUB_SHA}"
+          docker build \
+            -f ticketingapp/Dockerfile \
+            -t "$REG/$IMAGE_NAME:$TAG" \
+            ticketingapp
+
+      - name: Push image
+        run: |
+          REG="${{ steps.acr.outputs.SERVER }}"
+          TAG="${GITHUB_SHA}"
+          docker push "$REG/$IMAGE_NAME:$TAG"
 
       - name: Update Container App to new image
         run: |
+          REG="${{ steps.acr.outputs.SERVER }}"
+          TAG="${GITHUB_SHA}"
           az containerapp update \
-            --name "$AZ_CONTAINERAPP_NAME" \
-            --resource-group "$AZ_RESOURCE_GROUP" \
-            --image "$IMAGE_SHA"
+            -n "$APP" -g "$RG" \
+            --image "$REG/$IMAGE_NAME:$TAG"
