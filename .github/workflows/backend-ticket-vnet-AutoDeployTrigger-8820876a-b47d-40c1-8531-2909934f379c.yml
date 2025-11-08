@@ -6,17 +6,12 @@ on:
   workflow_dispatch:
 
 env:
-  # ---- These three come from your repo *Secrets* (Settings → Secrets and variables → Actions → Secrets) ----
-  #   AZ_ACR_NAME            e.g. ticketappacr
-  #   AZ_RESOURCE_GROUP      e.g. App
-  #   AZ_CONTAINERAPP_NAME   e.g. backend-ticket-vnet
-  AZ_ACR_NAME: ${{ secrets.AZ_ACR_NAME }}
-  AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}
-  AZ_CONTAINERAPP_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}
+  AZ_ACR_NAME: ${{ secrets.AZ_ACR_NAME }}                  # e.g. ticketappacr
+  AZ_RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP }}      # e.g. App
+  AZ_CONTAINERAPP_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}# e.g. backend-ticket-vnet
 
-  # Derived:
   ACR_LOGIN_SERVER: ${{ secrets.AZ_ACR_NAME }}.azurecr.io
-  IMAGE_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}    # repository inside ACR (can be anything)
+  IMAGE_NAME: ${{ secrets.AZ_CONTAINERAPP_NAME }}
 
 jobs:
   build-and-deploy:
@@ -27,9 +22,8 @@ jobs:
 
     steps:
       - name: Checkout
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
-      # 1) Login to Azure with your existing OIDC app (the one the wizard created).
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -37,18 +31,18 @@ jobs:
           tenant-id: ${{ secrets.BACKENDTICKETAPP_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.BACKENDTICKETAPP_AZURE_SUBSCRIPTION_ID }}
 
-      # 2) Log in to ACR using a refresh token (no username/password needed).
-      - name: ACR: docker login
+      - name: "ACR docker login"
         id: acrlogin
         run: |
           TOKEN=$(az acr login -n "$AZ_ACR_NAME" --expose-token --query accessToken -o tsv)
-          echo "$TOKEN" | docker login "$ACR_LOGIN_SERVER" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+          echo "$TOKEN" | docker login "$ACR_LOGIN_SERVER" \
+            --username 00000000-0000-0000-0000-000000000000 \
+            --password-stdin
 
-      # 3) Build & push the image (two tags: commit SHA and latest)
       - name: Build and push image
         run: |
-          APP_DIR=./                                  # <-- adjust if your backend is in a subfolder
-          DOCKERFILE=./Dockerfile                     # <-- adjust if your Dockerfile path is different
+          APP_DIR=./                                  # change if your backend is in a subfolder
+          DOCKERFILE=./Dockerfile                     # change if the Dockerfile path differs
 
           IMAGE_SHA_TAG="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
           IMAGE_LATEST_TAG="$ACR_LOGIN_SERVER/$IMAGE_NAME:latest"
@@ -60,9 +54,6 @@ jobs:
           echo "IMAGE_SHA_TAG=$IMAGE_SHA_TAG" >> $GITHUB_ENV
           echo "IMAGE_LATEST_TAG=$IMAGE_LATEST_TAG" >> $GITHUB_ENV
 
-      # 4) (Idempotent) ensure the Container App is allowed to pull from ACR.
-      #    If you enabled System Assigned MI on the Container App and gave it AcrPull,
-      #    this is harmless; if not, this associates the registry once.
       - name: Ensure registry on Container App
         run: |
           az containerapp registry set \
@@ -71,7 +62,6 @@ jobs:
             --server "$ACR_LOGIN_SERVER" \
             --identity system
 
-      # 5) Update the Container App to the new image (creates a new revision)
       - name: Update Container App image
         run: |
           az containerapp update \
