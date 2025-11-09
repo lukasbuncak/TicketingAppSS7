@@ -1,49 +1,94 @@
-name: Trigger auto deployment for backend-ticketapp
+# .github/workflows/build-and-deploy.yml
+name: build-and-deploy-backend-ticketapp
 
-# When this action will be executed
 on:
-  # Automatically trigger it when detected changes in repo
   push:
-    branches: 
-      [ main ]
-    paths:
-    - '**'
-    - '.github/workflows/backend-ticketapp-AutoDeployTrigger-78c7994a-daf9-4186-b7d5-eddb8736bd98.yml'
+    branches: ["main"]
+  workflow_dispatch:
 
-  # Allow manual trigger 
-  workflow_dispatch:      
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: backend-ticket-vnet
+  cancel-in-progress: true
+
+env:
+  AZURE_RESOURCE_GROUP: "App"
+  CONTAINER_APP_NAME: "backend-ticket-vnet"   # <-- verify this is the one you want
+  ACR_NAME: "${{ secrets.AZ_ACR_NAME }}"
+  ACR_REPO: "backend-ticketapp"
+  APP_PATH: "ticketingapp"
+  DOCKERFILE: "ticketingapp/Dockerfile"
+  TARGET_PORT: "8080"
 
 jobs:
-  build-and-deploy:
+  build_push_deploy:
     runs-on: ubuntu-latest
-    permissions: 
-      id-token: write #This is required for requesting the OIDC JWT Token
-      contents: read #Required when GH token is used to authenticate with private repo
-
     steps:
-      - name: Checkout to the branch
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.BACKENDTICKETAPP_AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.BACKENDTICKETAPP_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.BACKENDTICKETAPP_AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build and push container image to registry
-        uses: azure/container-apps-deploy-action@v2
+      - name: Enable Container Apps + providers
+        run: |
+          set -e
+          az extension add --name containerapp --upgrade
+          az provider register --namespace Microsoft.App --wait
+          az provider register --namespace Microsoft.ContainerRegistry --wait
+
+      - name: Get ACR login server & login Docker to ACR
+        id: acr
+        run: |
+          LOGIN_SERVER=$(az acr show -n "${ACR_NAME}" --query loginServer -o tsv)
+          echo "login_server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
+          az acr login -n "${ACR_NAME}"
+
+      - name: Image tag
+        id: img
+        run: echo "name=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push image from Dockerfile
+        uses: docker/build-push-action@v6
         with:
-          appSourcePath: ${{ github.workspace }}
-          _dockerfilePathKey_: _dockerfilePath_
-          _targetLabelKey_: _targetLabel_
-          registryUrl: 
-          registryUsername: ${{ secrets.BACKENDTICKETAPP_REGISTRY_USERNAME }}
-          registryPassword: ${{ secrets.BACKENDTICKETAPP_REGISTRY_PASSWORD }}
-          containerAppName: backend-ticketapp
-          resourceGroup: App
-          imageToBuild: default/[parameters('containerAppName')]:${{ github.sha }}
-          _buildArgumentsKey_: |
-            _buildArgumentsValues_
+          context: ${{ env.APP_PATH }}
+          file: ${{ env.DOCKERFILE }}
+          push: true
+          tags: ${{ steps.img.outputs.name }}
+          cache-from: type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:buildcache
+          cache-to: type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:buildcache,mode=max
 
+      - name: Attach ACR to Container App (managed identity)
+        run: |
+          ACR_LOGIN_SERVER=${{ steps.acr.outputs.login_server }}
+          az containerapp identity assign -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" --system
+          PRINCIPAL_ID=$(az containerapp show -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" --query identity.principalId -o tsv)
+          ACR_ID=$(az acr show -n "${ACR_NAME}" --query id -o tsv)
+          az role assignment create --assignee "$PRINCIPAL_ID" --role AcrPull --scope "$ACR_ID" || true
+          az containerapp registry set -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" --server "$ACR_LOGIN_SERVER" --identity system
 
+      - name: Ensure ingress targetPort matches app
+        run: |
+          az containerapp update \
+            -g "${AZURE_RESOURCE_GROUP}" \
+            -n "${CONTAINER_APP_NAME}" \
+            --ingress external \
+            --target-port "${TARGET_PORT}" \
+            --revision-mode Single
+
+      - name: Deploy new image
+        run: |
+          az containerapp update \
+            -g "${AZURE_RESOURCE_GROUP}" \
+            -n "${CONTAINER_APP_NAME}" \
+            --image "${{ steps.img.outputs.name }}" \
+            --revision-suffix "gh-${{ github.run_number }}"
