@@ -76,10 +76,8 @@ jobs:
           az role assignment create --assignee "$PRINCIPAL_ID" --role AcrPull --scope "$ACR_ID" || true
           az containerapp registry set -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" --server "$ACR_LOGIN_SERVER" --identity system
 
-      # FIXED: use ingress + revision subcommands (not update)
       - name: Ensure ingress (external) and targetPort
         run: |
-          # If ingress is not enabled, enable it; otherwise update target port/type
           if ! az containerapp ingress show -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" >/dev/null 2>&1; then
             az containerapp ingress enable \
               -g "${AZURE_RESOURCE_GROUP}" \
@@ -101,39 +99,38 @@ jobs:
             -n "${CONTAINER_APP_NAME}" \
             --mode Single
 
-      - name: Apply runtime env vars (DB + JWT)
+      # ====== RUNTIME VARS + DEPLOY IMAGE IN ONE UPDATE ======
+      - name: Apply runtime env vars and deploy image
         run: |
-          # 1) Secrets (idempotent – updates in place)
+          set -e
+
+          # 1) Put sensitive values in secrets (idempotent)
           az containerapp secret set \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
             --secrets \
               spring-datasource-password=${{ secrets.SPRING_DATASOURCE_PASSWORD }} \
               jwt-secret=${{ secrets.JWT_SECRET }}
-      
-          # 2) Build the --set-env-vars string
-          SET_VARS="SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
-          SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
-          SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password \
-          JWT_SECRET=secretref:jwt-secret"
-          
+
+          # (optional) clean up any old misnamed secret
+          az containerapp secret remove \
+            -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
+            --secret-names spring-datasource-pass || true
+
+          # 2) Build env var TOKEN LIST as an array (no newlines/quotes)
+          SET_VARS=(
+            "SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}"
+            "SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}"
+            "SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password"
+            "JWT_SECRET=secretref:jwt-secret"
+          )
           if [ -n "${{ secrets.SPRING_PROFILES_ACTIVE }}" ]; then
-            SET_VARS="$SET_VARS SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }}"
+            SET_VARS+=("SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }}")
           fi
-      
-          # 3) Apply (creates a new revision)
+
+          # 3) Update image + env in a single revision
           az containerapp update \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
-            --set-env-vars $SET_VARS \
-            --replace-env-vars true
-
-
-      - name: Deploy new image
-        run: |
-          az containerapp update \
-            -g "${AZURE_RESOURCE_GROUP}" \
-            -n "${CONTAINER_APP_NAME}" \
             --image "${{ steps.img.outputs.name }}" \
+            --set-env-vars "${SET_VARS[@]}" \
+            --replace-env-vars true \
             --revision-suffix "gh-${{ github.run_number }}"
-
-
-
