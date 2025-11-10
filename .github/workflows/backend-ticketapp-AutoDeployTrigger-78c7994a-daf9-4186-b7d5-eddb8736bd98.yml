@@ -104,20 +104,14 @@ jobs:
         run: |
           set -e
       
-          # 1) Set correct secrets only (no old names)
+          # 1) Set secrets (only correct ones)
           az containerapp secret set \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
             --secrets \
               spring-datasource-password='${{ secrets.SPRING_DATASOURCE_PASSWORD }}' \
               jwt-secret='${{ secrets.JWT_SECRET }}'
       
-          # 2) Conditionally add SPRING_PROFILES_ACTIVE
-          EXTRA_ENV=""
-          if [ -n "${{ secrets.SPRING_PROFILES_ACTIVE }}" ]; then
-            EXTRA_ENV="SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }}"
-          fi
-      
-          # 3) Update image + environment
+          # 2) Update image + env vars (single flat command)
           az containerapp update \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
             --image "${{ steps.img.outputs.name }}" \
@@ -126,8 +120,10 @@ jobs:
               SPRING_DATASOURCE_USERNAME='${{ secrets.SPRING_DATASOURCE_USERNAME }}' \
               SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password \
               JWT_SECRET=secretref:jwt-secret \
-              $EXTRA_ENV \
+              SPRING_PROFILES_ACTIVE='${{ secrets.SPRING_PROFILES_ACTIVE }}' \
             --replace-env-vars true \
             --revision-suffix "gh-${{ github.run_number }}"
+
+
 
 
