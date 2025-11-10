@@ -101,6 +101,26 @@ jobs:
             -n "${CONTAINER_APP_NAME}" \
             --mode Single
 
+      - name: Apply runtime env vars (DB + JWT)
+        run: |
+          # store sensitive values as ACA secrets
+          az containerapp secret set \
+            -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
+            --secrets \
+              spring-datasource-password='${{ secrets.SPRING_DATASOURCE_PASSWORD }}' \
+              jwt-secret='${{ secrets.JWT_SECRET }}'
+      
+          # wire env vars (reference secrets for sensitive ones)
+          az containerapp update \
+            -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
+            --set-env-vars \
+              SPRING_DATASOURCE_URL='${{ secrets.SPRING_DATASOURCE_URL }}' \
+              SPRING_DATASOURCE_USERNAME='${{ secrets.SPRING_DATASOURCE_USERNAME }}' \
+              SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password \
+              JWT_SECRET=secretref:jwt-secret \
+              SPRING_PROFILES_ACTIVE='${{ secrets.SPRING_PROFILES_ACTIVE || '' }}' \
+            --replace-env-vars true
+
       - name: Deploy new image
         run: |
           az containerapp update \
@@ -108,3 +128,4 @@ jobs:
             -n "${CONTAINER_APP_NAME}" \
             --image "${{ steps.img.outputs.name }}" \
             --revision-suffix "gh-${{ github.run_number }}"
+
