@@ -103,28 +103,27 @@ jobs:
 
       - name: Apply runtime env vars (DB + JWT)
         run: |
-          # 1) Put sensitive values in ACA secrets (idempotent)
+          # 1) Secrets (idempotent – updates in place)
           az containerapp secret set \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
             --secrets \
               spring-datasource-password=${{ secrets.SPRING_DATASOURCE_PASSWORD }} \
               jwt-secret=${{ secrets.JWT_SECRET }}
       
-          # 2) Build optional profile variable only if present
-          EXTRA_PROFILE=""
+          # 2) Build the --set-env-vars string
+          SET_VARS="SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
+          SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
+          SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password \
+          JWT_SECRET=secretref:jwt-secret"
+          
           if [ -n "${{ secrets.SPRING_PROFILES_ACTIVE }}" ]; then
-            EXTRA_PROFILE="SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }}"
+            SET_VARS="$SET_VARS SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }}"
           fi
       
-          # 3) Wire env vars (referencing secrets for sensitive ones)
+          # 3) Apply (creates a new revision)
           az containerapp update \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
-            --set-env-vars \
-              SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
-              SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
-              SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password \
-              JWT_SECRET=secretref:jwt-secret \
-              $EXTRA_PROFILE \
+            --set-env-vars $SET_VARS \
             --replace-env-vars true
 
 
@@ -135,5 +134,6 @@ jobs:
             -n "${CONTAINER_APP_NAME}" \
             --image "${{ steps.img.outputs.name }}" \
             --revision-suffix "gh-${{ github.run_number }}"
+
 
 
