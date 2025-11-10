@@ -103,34 +103,31 @@ jobs:
       - name: Apply runtime env vars and deploy image
         run: |
           set -e
-
-          # 1) Put sensitive values in secrets (idempotent)
+      
+          # 1) Set correct secrets only (no old names)
           az containerapp secret set \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
             --secrets \
-              spring-datasource-password=${{ secrets.SPRING_DATASOURCE_PASSWORD }} \
-              jwt-secret=${{ secrets.JWT_SECRET }}
-
-          # (optional) clean up any old misnamed secret
-          az containerapp secret remove \
-            -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
-            --secret-names spring-datasource-pass || true
-
-          # 2) Build env var TOKEN LIST as an array (no newlines/quotes)
-          SET_VARS=(
-            "SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}"
-            "SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}"
-            "SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password"
-            "JWT_SECRET=secretref:jwt-secret"
-          )
+              spring-datasource-password='${{ secrets.SPRING_DATASOURCE_PASSWORD }}' \
+              jwt-secret='${{ secrets.JWT_SECRET }}'
+      
+          # 2) Conditionally add SPRING_PROFILES_ACTIVE
+          EXTRA_ENV=""
           if [ -n "${{ secrets.SPRING_PROFILES_ACTIVE }}" ]; then
-            SET_VARS+=("SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }}")
+            EXTRA_ENV="SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }}"
           fi
-
-          # 3) Update image + env in a single revision
+      
+          # 3) Update image + environment
           az containerapp update \
             -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" \
             --image "${{ steps.img.outputs.name }}" \
-            --set-env-vars "${SET_VARS[@]}" \
+            --set-env-vars \
+              SPRING_DATASOURCE_URL='${{ secrets.SPRING_DATASOURCE_URL }}' \
+              SPRING_DATASOURCE_USERNAME='${{ secrets.SPRING_DATASOURCE_USERNAME }}' \
+              SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password \
+              JWT_SECRET=secretref:jwt-secret \
+              $EXTRA_ENV \
             --replace-env-vars true \
             --revision-suffix "gh-${{ github.run_number }}"
+
+
