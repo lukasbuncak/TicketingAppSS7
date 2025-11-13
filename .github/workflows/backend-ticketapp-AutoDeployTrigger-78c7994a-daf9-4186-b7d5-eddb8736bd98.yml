@@ -100,29 +100,13 @@ jobs:
             --mode Single
 
       # ====== RUNTIME VARS + DEPLOY IMAGE IN ONE UPDATE ======
-      - name: Apply runtime env vars and deploy image
+      - name: Deploy new image
         run: |
-          set -e
-      
-          # 1) Set secrets (correct only)
-          az containerapp secret set \
-            -g "$AZURE_RESOURCE_GROUP" -n "$CONTAINER_APP_NAME" \
-            --secrets \
-              spring-datasource-password=${{ secrets.SPRING_DATASOURCE_PASSWORD }} \
-              jwt-secret=${{ secrets.JWT_SECRET }}
-      
-          # 2) Update env + image (NO QUOTES ANYWHERE)
           az containerapp update \
             -g "$AZURE_RESOURCE_GROUP" -n "$CONTAINER_APP_NAME" \
             --image "${{ steps.img.outputs.name }}" \
-            --set-env-vars \
-              SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
-              SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
-              SPRING_DATASOURCE_PASSWORD=secretref:spring-datasource-password \
-              JWT_SECRET=secretref:jwt-secret \
-              SPRING_PROFILES_ACTIVE=${{ secrets.SPRING_PROFILES_ACTIVE }} \
-            --replace-env-vars true \
             --revision-suffix "gh-${{ github.run_number }}"
+
 
 
 
