@@ -60,7 +60,6 @@ public class IdentityAdminServiceImpl implements IdentityAdminService {
 
         //TODO: password should be hashed and sent to us via email so that we can change it
         // later we will send out email to change it together with the base password. (not yet)
-
     }
 
     @Override

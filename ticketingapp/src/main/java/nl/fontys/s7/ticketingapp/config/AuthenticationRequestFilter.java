@@ -15,6 +15,7 @@ import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.util.AntPathMatcher;
 
 import java.io.IOException;
 import java.util.List;
@@ -25,6 +26,37 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
 
     private static final String ROLE_PREFIX = "ROLE_";
     private final AccessTokenDecoder accessTokenDecoder;
+
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
+
+    // These paths are already permitAll() in SecurityConfig
+    private static final String[] PUBLIC_PATHS = {
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/v3/api-docs/**",
+            "/swagger-resources/**",
+            "/actuator/health",
+            "/actuator/info",
+            "/auth/login"
+    };
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        String method = request.getMethod();
+
+        // CORS preflight should not require JWT
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            return true;
+        }
+
+        for (String pattern : PUBLIC_PATHS) {
+            if (PATH_MATCHER.match(pattern, path)) {
+                return true;   // skip JWT logic for these
+            }
+        }
+        return false;          // run JWT logic for everything else
+    }
 
     @Override
     protected void doFilterInternal(
