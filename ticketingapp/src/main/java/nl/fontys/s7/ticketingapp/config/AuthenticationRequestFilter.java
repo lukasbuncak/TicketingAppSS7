@@ -37,7 +37,8 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
             "/swagger-resources/**",
             "/actuator/health",
             "/actuator/info",
-            "/auth/login"
+            "/auth/login",
+            "/error"
     };
 
     @Override
@@ -45,17 +46,21 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         String method = request.getMethod();
 
-        // CORS preflight should not require JWT
+        System.out.println("[JWT-FILTER] shouldNotFilter? " + method + " " + path);
+
         if ("OPTIONS".equalsIgnoreCase(method)) {
+            System.out.println("[JWT-FILTER] -> true (CORS preflight)");
             return true;
         }
 
         for (String pattern : PUBLIC_PATHS) {
             if (PATH_MATCHER.match(pattern, path)) {
-                return true;   // skip JWT logic for these
+                System.out.println("[JWT-FILTER] -> true (public path " + pattern + ")");
+                return true;
             }
         }
-        return false;          // run JWT logic for everything else
+        System.out.println("[JWT-FILTER] -> false (JWT required)");
+        return false;
     }
 
     @Override
@@ -64,9 +69,12 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain chain) throws ServletException, IOException {
 
+        System.out.println("[JWT-FILTER] doFilterInternal " + request.getMethod()
+                + " " + request.getServletPath());
         // Read "Authorization: Bearer <jwt>"
         final String auth = request.getHeader("Authorization");
         if (auth == null || !auth.startsWith("Bearer ")) {
+            System.out.println("[JWT-FILTER] no Bearer header -> just continue");
             chain.doFilter(request, response); // no token -> continue (endpoint may be public)
             return;
         }
@@ -90,10 +98,11 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
             authToken.setDetails(at); // keep the raw AccessToken handy if you want to read claims later
 
             SecurityContextHolder.getContext().setAuthentication(authToken);
-
+            System.out.println("[JWT-FILTER] token OK -> continue");
             chain.doFilter(request, response);
         } catch (InvalidAccessTokenException e) {
             // Invalid token -> 401
+            System.out.println("[JWT-FILTER] invalid token -> 401");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.flushBuffer();
         }
