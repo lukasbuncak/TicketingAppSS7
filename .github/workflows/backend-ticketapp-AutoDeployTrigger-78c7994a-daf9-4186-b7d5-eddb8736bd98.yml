@@ -1,0 +1,115 @@
+# .github/workflows/build-and-deploy.yml
+name: build-and-deploy-backend-ticketapp
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: backend-ticket-vnet
+  cancel-in-progress: true
+
+env:
+  AZURE_RESOURCE_GROUP: "App"
+  CONTAINER_APP_NAME: "backend-ticket-vnet"
+  ACR_NAME: "${{ secrets.AZ_ACR_NAME }}"
+  ACR_REPO: "backend-ticketapp"
+  APP_PATH: "ticketingapp"
+  DOCKERFILE: "ticketingapp/Dockerfile"
+  TARGET_PORT: "8080"
+
+jobs:
+  build_push_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.BACKENDTICKETAPP_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BACKENDTICKETAPP_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BACKENDTICKETAPP_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Enable Container Apps + providers
+        run: |
+          set -e
+          az extension add --name containerapp --upgrade
+          az provider register --namespace Microsoft.App --wait
+          az provider register --namespace Microsoft.ContainerRegistry --wait
+
+      - name: Get ACR login server & login Docker to ACR
+        id: acr
+        run: |
+          LOGIN_SERVER=$(az acr show -n "${ACR_NAME}" --query loginServer -o tsv)
+          echo "login_server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
+          az acr login -n "${ACR_NAME}"
+
+      - name: Image tag
+        id: img
+        run: echo "name=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push image from Dockerfile
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.APP_PATH }}
+          file: ${{ env.DOCKERFILE }}
+          push: true
+          tags: ${{ steps.img.outputs.name }}
+          cache-from: type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:buildcache
+          cache-to: type=registry,ref=${{ steps.acr.outputs.login_server }}/${{ env.ACR_REPO }}:buildcache,mode=max
+
+      - name: Attach ACR to Container App (managed identity)
+        run: |
+          ACR_LOGIN_SERVER=${{ steps.acr.outputs.login_server }}
+          az containerapp identity assign -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" --system
+          PRINCIPAL_ID=$(az containerapp show -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" --query identity.principalId -o tsv)
+          ACR_ID=$(az acr show -n "${ACR_NAME}" --query id -o tsv)
+          az role assignment create --assignee "$PRINCIPAL_ID" --role AcrPull --scope "$ACR_ID" || true
+          az containerapp registry set -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" --server "$ACR_LOGIN_SERVER" --identity system
+
+      - name: Ensure ingress (external) and targetPort
+        run: |
+          if ! az containerapp ingress show -g "${AZURE_RESOURCE_GROUP}" -n "${CONTAINER_APP_NAME}" >/dev/null 2>&1; then
+            az containerapp ingress enable \
+              -g "${AZURE_RESOURCE_GROUP}" \
+              -n "${CONTAINER_APP_NAME}" \
+              --type external \
+              --target-port "${TARGET_PORT}"
+          else
+            az containerapp ingress update \
+              -g "${AZURE_RESOURCE_GROUP}" \
+              -n "${CONTAINER_APP_NAME}" \
+              --type external \
+              --target-port "${TARGET_PORT}"
+          fi
+
+      - name: Ensure Single revision mode
+        run: |
+          az containerapp revision set-mode \
+            -g "${AZURE_RESOURCE_GROUP}" \
+            -n "${CONTAINER_APP_NAME}" \
+            --mode Single
+
+      # ====== RUNTIME VARS + DEPLOY IMAGE IN ONE UPDATE ======
+      - name: Deploy new image
+        run: |
+          az containerapp update \
+            -g "$AZURE_RESOURCE_GROUP" -n "$CONTAINER_APP_NAME" \
+            --image "${{ steps.img.outputs.name }}" \
+            --revision-suffix "gh-${{ github.run_number }}"
+
+
+
+
+
+
+
