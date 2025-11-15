@@ -1,5 +1,6 @@
 package nl.fontys.s7.ticketingapp.persistance.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -24,6 +25,7 @@ public class LoginCredentialEntity {
     private UserEntity user;
 
     @NotBlank
+    @JsonIgnore
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 

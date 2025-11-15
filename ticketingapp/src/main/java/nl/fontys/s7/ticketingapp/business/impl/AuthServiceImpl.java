@@ -1,5 +1,6 @@
 package nl.fontys.s7.ticketingapp.business.impl;
 
+import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import nl.fontys.s7.ticketingapp.business.AuthService;
 import nl.fontys.s7.ticketingapp.config.token.AccessTokenEncoder;
@@ -23,6 +24,7 @@ public class AuthServiceImpl implements AuthService {
     private final AccessTokenEncoder jwt; // your encoder that sets issuer/audience/exp
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthServiceImpl.class);
     @Override
+    @Transactional
     public LoginResponse login( LoginRequest request) {
         // 1) Lookup
         UserEntity user = users.findBySchoolEmail (request.schoolEmail ())
