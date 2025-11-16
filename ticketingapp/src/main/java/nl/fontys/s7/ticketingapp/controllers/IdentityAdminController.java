@@ -15,10 +15,11 @@ import java.net.URI;
 @RestController
 @AllArgsConstructor
 @RequestMapping("admin")
+@RolesAllowed({"ADMIN"})
 public class IdentityAdminController {
     private final IdentityAdminService identityAdminService;
 
-//    @RolesAllowed({"ADMIN"})
+    @RolesAllowed({"ADMIN"})
     @PostMapping("/create/student_user")
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity < AdminUserResponse > createUserAccountAsAdmin( @RequestBody @Valid CreateUserAccountRequest request) {
@@ -33,6 +34,11 @@ public class IdentityAdminController {
         return ResponseEntity.created(location).body(created);
     }
 
+    @RolesAllowed({"ADMIN"})
+    @GetMapping("/ping")
+    public String ping() {
+        return "admin ok";
+    }
 
     @RolesAllowed({"ADMIN"})
     @GetMapping("/users/{id}")

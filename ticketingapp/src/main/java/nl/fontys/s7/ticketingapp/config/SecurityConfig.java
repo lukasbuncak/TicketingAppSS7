@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,6 +17,8 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import java.util.List;
 
 @Configuration
@@ -29,6 +32,15 @@ public class SecurityConfig {
             "/swagger-ui.html",
             "/swagger-ui/**"
     };
+
+    private final AuthenticationEntryPoint entryPoint;
+    private final AuthenticationRequestFilter jwtFilter;
+
+    public SecurityConfig(AuthenticationEntryPoint entryPoint,
+                          AuthenticationRequestFilter jwtFilter) {
+        this.entryPoint = entryPoint;
+        this.jwtFilter = jwtFilter;
+    }
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
@@ -44,6 +56,39 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Order(1)
+    public SecurityFilterChain adminChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/admin/**")
+                .cors(Customizer.withDefaults())
+                .csrf(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(reg -> reg
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .anyRequest().hasRole("ADMIN")  // ROLE_ADMIN from Entra app role
+                )
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(entryPoint))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(adminJwtAuthConverter()))
+                );
+
+        // NOTE: we DO NOT add AuthenticationRequestFilter here
+        return http.build();
+    }
+
+    private JwtAuthenticationConverter adminJwtAuthConverter() {
+        JwtGrantedAuthoritiesConverter rolesConverter = new JwtGrantedAuthoritiesConverter();
+        rolesConverter.setAuthorityPrefix("ROLE_");
+        rolesConverter.setAuthoritiesClaimName("roles"); // Entra app roles
+
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(rolesConverter);
+        return converter;
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             AuthenticationEntryPoint entryPoint,
@@ -64,7 +109,6 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         // ONLY login is public
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
-                        .requestMatchers("/admin/**").permitAll() //TODO: Temporary, remove later in production
                         // everything else requires a valid Bearer token
                         .anyRequest().authenticated()
                 )
