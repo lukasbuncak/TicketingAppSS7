@@ -29,7 +29,7 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
-    // These paths are already permitAll() in SecurityConfig
+    // These paths are already permitAll() in SecurityConfig or/and should be responsible only for its own paths
     private static final String[] PUBLIC_PATHS = {
             "/swagger-ui.html",
             "/swagger-ui/**",
@@ -38,7 +38,8 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
             "/actuator/health",
             "/actuator/info",
             "/auth/login",
-            "/error"
+            "/error",
+            "/admin/**"
     };
 
     @Override
