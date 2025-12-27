@@ -82,8 +82,10 @@ public class IdentityAdminServiceImpl implements IdentityAdminService {
             );
         }
 
-        user.setStatus( nl.fontys.s7.ticketingapp.domain.enumerations.UserStatus.DISABLED);
-        if (newStatus.equals ( "DISABLED" )) {
+        UserStatus enumValue = nl.fontys.s7.ticketingapp.domain.enumerations.UserStatus.valueOf(newStatus);
+
+        user.setStatus(enumValue);
+        if (enumValue == nl.fontys.s7.ticketingapp.domain.enumerations.UserStatus.DISABLED) {
             user.setDisabledAt(java.time.Instant.now());
         } else { // ACTIVE
             user.setDisabledAt(null);

@@ -108,7 +108,7 @@ public class SecurityConfig {
                         .requestMatchers(SWAGGER).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         // ONLY login is public
-                        .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/login", "auth/mfa/verify").permitAll()
                         // everything else requires a valid Bearer token
                         .anyRequest().authenticated()
                 )

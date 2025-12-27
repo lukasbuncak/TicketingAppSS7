@@ -20,6 +20,13 @@ configurations {
 	}
 }
 
+dependencyManagement {
+//	imports {
+//		// Pick a compatible version line; this one is commonly used with Spring Boot 3.x
+//		mavenBom "com.azure.spring:spring-cloud-azure-dependencies:5.16.0"
+//	}
+}
+
 repositories {
 	mavenCentral()
 }
@@ -41,6 +48,9 @@ dependencies {
 	implementation "org.springframework.boot:spring-boot-starter-oauth2-resource-server"
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
+	//TOTP
+	implementation "com.warrenstrange:googleauth:1.5.0"
+
 	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
@@ -49,6 +59,9 @@ dependencies {
 	// Hashing Argon2
 	implementation 'de.mkammerer:argon2-jvm:2.1'
 	implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
+
+//	//Key Vault
+//	implementation 'com.azure.spring:spring-cloud-azure-starter-keyvault-secrets'
 }
 
 tasks.named('test') {

@@ -33,6 +33,18 @@ public class LoginCredentialEntity {
     @Column(name = "last_password_change", nullable = false)
     private Instant lastPasswordChange;
 
+    @NotNull
+    @Column(name = "totp_enabled", nullable = false)
+    private Boolean totpEnabled = false;
+
+    @NotNull
+    @Column(name = "totp_pending", nullable = false)
+    private Boolean totpPending = false;
+
+    @JsonIgnore
+    @Column(name = "totp_secret")
+    private String totpSecret;
+
     @PrePersist
     void onCreate() {
         if (lastPasswordChange == null) lastPasswordChange = Instant.now();

@@ -38,6 +38,7 @@ public class AuthenticationRequestFilter extends OncePerRequestFilter {
             "/actuator/health",
             "/actuator/info",
             "/auth/login",
+            "/auth/mfa/verify",
             "/error",
             "/admin/**"
     };
