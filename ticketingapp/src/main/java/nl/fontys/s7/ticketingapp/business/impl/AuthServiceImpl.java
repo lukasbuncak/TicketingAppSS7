@@ -87,6 +87,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
     public LoginResponse verifyMfa(String mfaTokenEncoded, String code) {
         // 1) Validate MFA token (signature + exp + issuer/aud + mfa=true)
         MfaToken mfaToken = mfaDecodeJwt.decode(mfaTokenEncoded);

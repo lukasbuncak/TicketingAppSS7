@@ -63,6 +63,7 @@ public class IdentityAdminServiceImpl implements IdentityAdminService {
     }
 
     @Override
+    @Transactional
     public AdminUserResponse setUserStatus ( UpdateUserStatusRequest UserStatus ) {
         UserEntity user = users.findById(UserStatus.userId ())
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + UserStatus.userId ()));
