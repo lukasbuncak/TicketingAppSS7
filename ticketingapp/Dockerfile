@@ -21,6 +21,12 @@ RUN ./gradlew --no-daemon clean bootJar -x test \
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
+# Download the Application Insights Java agent
+ADD https://github.com/microsoft/ApplicationInsights-Java/releases/download/3.5.0/applicationinsights-agent-3.5.0.jar /app/applicationinsights-agent.jar
+
+# Copy AI config (we'll create this file in the project)
+COPY src/main/resources/applicationinsights.json /app/applicationinsights.json
+
 # Create non-root user for safer runtime
 RUN useradd --no-create-home --uid 10001 appuser
 
@@ -32,6 +38,9 @@ EXPOSE 8080
 
 # Drop root
 USER 10001
+
+# Enable the Java agent
+ENV JAVA_TOOL_OPTIONS="-javaagent:/app/applicationinsights-agent.jar"
 
 # Start the app
 ENTRYPOINT ["java","-jar","/app/app.jar"]

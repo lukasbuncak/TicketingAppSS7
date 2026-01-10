@@ -1,0 +1,9 @@
+{
+  "connectionString": "${APPLICATIONINSIGHTS_CONNECTION_STRING}",
+  "role": {
+    "name": "ticketing-backend"
+  },
+  "sampling": {
+    "percentage": 50
+  }
+}
