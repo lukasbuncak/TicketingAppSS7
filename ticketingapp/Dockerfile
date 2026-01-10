@@ -36,11 +36,12 @@ COPY --from=build /app/app.jar /app/app.jar
 # Document the app port (use --target-port 8080 in Azure)
 EXPOSE 8080
 
+# Enable the Java agent
+ENV JAVA_TOOL_OPTIONS="-javaagent:/app/applicationinsights-agent.jar"
+
 # Drop root
 USER 10001
 
-# Enable the Java agent
-ENV JAVA_TOOL_OPTIONS="-javaagent:/app/applicationinsights-agent.jar"
 
 # Start the app
 ENTRYPOINT ["java","-jar","/app/app.jar"]
